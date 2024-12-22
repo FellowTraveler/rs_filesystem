@@ -1,0 +1,76 @@
+[
+  {
+    "name": "get_current_time_in_city",
+    "description": "Display current time in the city",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "city": {
+          "type": "string",
+          "description": "City name"
+        }
+      },
+      "required": [
+        "city"
+      ]
+    }
+  },
+  {
+    "name": "get_local_time",
+    "description": "Get the current local time",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "required": []
+    }
+  },
+  {
+    "name": "file_edit",
+    "description": "Make a targeted edit to a file with optional git commit",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to the file to edit"
+        },
+        "start_line": {
+          "type": "integer",
+          "description": "Starting line number for the edit (0-based)"
+        },
+        "end_line": {
+          "type": "integer",
+          "description": "Ending line number for the edit (0-based)"
+        },
+        "new_content": {
+          "type": "string",
+          "description": "New content to insert"
+        },
+        "commit_message": {
+          "type": "string",
+          "description": "Optional git commit message. If provided, changes will be committed"
+        }
+      },
+      "required": [
+        "file_path",
+        "start_line",
+        "end_line",
+        "new_content"
+      ]
+    }
+  },
+  {
+    "name": "read_file",
+    "description": "Read the contents of a file",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "file_path": {
+          "type": "string",
+          "description": "Path to the file to read"
+        }
+      },
+      "required": ["file_path"]
+    }
+  }
+]
