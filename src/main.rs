@@ -11,6 +11,9 @@ use crate::mcp::types::JsonRpcResponse;
 use crate::mcp::types::ToolCallRequestParams;
 use crate::mcp::utilities::*;
 use clap::Parser;
+use dirs::data_local_dir;
+use dirs::home_dir;
+use dirs::state_dir;
 use rpc_router::Error;
 use rpc_router::Handler;
 use rpc_router::Request;
@@ -18,8 +21,10 @@ use rpc_router::Router;
 use rpc_router::RouterBuilder;
 use serde_json::json;
 use serde_json::Value;
+use std::env;
 use std::fs::OpenOptions;
 use std::io::Write;
+use std::path::PathBuf;
 use tokio::io::AsyncBufReadExt;
 use tokio::signal;
 
@@ -36,6 +41,31 @@ fn build_rpc_router() -> Router {
         .append_dyn("resources/read", resource_read.into_dyn());
     let builder = register_tools(builder);
     builder.build()
+}
+
+fn get_log_directory() -> PathBuf {
+    if cfg!(target_os = "macos") {
+        // macOS: ~/Library/Logs/Claude
+        home_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Library/Logs/Claude")
+    } else if cfg!(target_os = "windows") {
+        // Windows: %LOCALAPPDATA%\Claude\logs
+        data_local_dir()
+            .unwrap_or_else(|| PathBuf::from("."))
+            .join("Claude")
+            .join("logs")
+    } else {
+        // Linux: ~/.local/state/claude/logs
+        state_dir()
+            .unwrap_or_else(|| {
+                home_dir()
+                    .unwrap_or_else(|| PathBuf::from("."))
+                    .join(".local/state")
+            })
+            .join("claude")
+            .join("logs")
+    }
 }
 
 #[tokio::main]
@@ -77,11 +107,15 @@ async fn main() {
 
     // Process JSON-RPC from MCP client
     let router = build_rpc_router();
+    let log_path = env::var("MCP_LOG_FILE_PATH").map(PathBuf::from).unwrap_or_else(|_| {
+        get_log_directory().join("rs_filesystem.logs.jsonl")
+    });
+
     let mut logging_file = OpenOptions::new()
         .create(true)
         .write(true)
         .append(true)
-        .open("/Users/au/Library/Logs/Claude/rs_filesystem.logs.jsonl")
+        .open(&log_path)
         .unwrap();
 
     // Spawn a task to read lines from stdin
