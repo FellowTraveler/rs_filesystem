@@ -38,7 +38,9 @@ fn build_rpc_router() -> Router {
         .append_dyn("prompts/list", prompts_list.into_dyn())
         .append_dyn("prompts/get", prompts_get.into_dyn())
         .append_dyn("resources/list", resources_list.into_dyn())
-        .append_dyn("resources/read", resource_read.into_dyn());
+        .append_dyn("resources/read", resource_read.into_dyn())
+        .append_dyn("resources/list_directory", list_directory.into_dyn())
+        .append_dyn("resources/get_file_info", get_file_info.into_dyn());
     let builder = register_tools(builder);
     builder.build()
 }

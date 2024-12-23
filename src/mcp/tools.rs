@@ -18,6 +18,8 @@ pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
         .append_dyn("get_local_time", get_local_time.into_dyn())
         .append_dyn("file_edit", file_edit.into_dyn())
         .append_dyn("read_file", read_file.into_dyn())
+        .append_dyn("create_directory", create_directory.into_dyn())
+        .append_dyn("overwrite_file", overwrite_file.into_dyn())
 }
 
 pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<ListToolsResult> {
@@ -101,6 +103,41 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                         }
                     },
                     required: vec!["file_path".to_string()],
+                },
+            },
+            Tool {
+                name: "create_directory".to_string(),
+                description: Some("Create a new directory".to_string()),
+                input_schema: ToolInputSchema {
+                    type_name: "object".to_string(),
+                    properties: hashmap! {
+                        "path".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Path to the new directory".to_owned()),
+                            enum_values: None,
+                        }
+                    },
+                    required: vec!["path".to_string()],
+                },
+            },
+            Tool {
+                name: "overwrite_file".to_string(),
+                description: Some("Overwrite the contents of a file".to_string()),
+                input_schema: ToolInputSchema {
+                    type_name: "object".to_string(),
+                    properties: hashmap! {
+                        "path".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Path to the file to overwrite".to_owned()),
+                            enum_values: None,
+                        },
+                        "content".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("New content to write".to_owned()),
+                            enum_values: None,
+                        }
+                    },
+                    required: vec!["path".to_string(), "content".to_string()],
                 },
             }
         ],
@@ -195,6 +232,47 @@ pub async fn file_edit(request: FileEditRequest) -> HandlerResult<CallToolResult
         content: vec![CallToolResultContent::Text { text: message }],
         is_error: false,
     })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateDirectoryRequest {
+    pub path: String,
+}
+
+pub async fn create_directory(request: CreateDirectoryRequest) -> HandlerResult<CallToolResult> {
+    let path = PathBuf::from(&request.path);
+    match std::fs::create_dir_all(&path) {
+        Ok(_) => Ok(CallToolResult {
+            result: json!({
+                "success": true,
+                "path": path.to_string_lossy().to_string()
+            }),
+        }),
+        Err(e) => Err(JsonRpcError::internal_error(format!(
+            "Failed to create directory: {}", e
+        ))),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OverwriteFileRequest {
+    pub path: String,
+    pub content: String,
+}
+
+pub async fn overwrite_file(request: OverwriteFileRequest) -> HandlerResult<CallToolResult> {
+    let path = PathBuf::from(&request.path);
+    match std::fs::write(&path, &request.content) {
+        Ok(_) => Ok(CallToolResult {
+            result: json!({
+                "success": true,
+                "path": path.to_string_lossy().to_string()
+            }),
+        }),
+        Err(e) => Err(JsonRpcError::internal_error(format!(
+            "Failed to write file: {}", e
+        ))),
+    }
 }
 
 #[derive(Deserialize, Serialize, RpcParams)]
