@@ -18,18 +18,15 @@ fn get_allowed_directories() -> Vec<String> {
 pub async fn resources_list(
     _request: Option<ListResourcesRequest>,
 ) -> HandlerResult<ListResourcesResult> {
-    let allowed_dirs = get_allowed_directories();
     let mut resources = Vec::new();
     
-    // Only include the resource if there are allowed directories
-    if !allowed_dirs.is_empty() {
-        resources.push(Resource {
-            uri: Url::parse("file:///api/allowed_directories").unwrap(),
-            name: "Allowed Directories".to_string(),
-            description: Some("List of directories that can be accessed".to_string()),
-            mime_type: Some("application/json".to_string()),
-        });
-    }
+    // Always include the allowed_directories resource
+    resources.push(Resource {
+        uri: Url::parse("file:///api/allowed_directories").unwrap(),
+        name: "Allowed Directories".to_string(),
+        description: Some("List of directories that can be accessed".to_string()),
+        mime_type: Some("application/json".to_string()),
+    });
     
     let response = ListResourcesResult {
         resources,
@@ -42,10 +39,6 @@ pub async fn resource_read(request: ReadResourceRequest) -> HandlerResult<ReadRe
     let response = match request.uri.path() {
         "/api/allowed_directories" => {
             let allowed_dirs = get_allowed_directories();
-            if allowed_dirs.is_empty() {
-                return Err(json!({"code": -32602, "message": "No allowed directories configured"}).into_handler_error());
-            }
-
             ReadResourceResult {
                 contents: vec![TextResourceContents {
                     uri: request.uri.clone(),
@@ -65,10 +58,6 @@ pub struct GetAllowedDirectoriesRequest {
 
 pub async fn allowed_directories(_request: GetAllowedDirectoriesRequest) -> HandlerResult<ReadResourceResult> {
     let allowed_dirs = get_allowed_directories();
-    if allowed_dirs.is_empty() {
-        return Err(json!({"code": -32602, "message": "No allowed directories configured"}).into_handler_error());
-    }
-
     Ok(ReadResourceResult {
         contents: vec![TextResourceContents {
             uri: Url::parse("file:///api/allowed_directories").unwrap(),
