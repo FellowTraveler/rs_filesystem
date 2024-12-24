@@ -1,10 +1,12 @@
 use crate::mcp::types::*;
 use rpc_router::HandlerResult;
+use rpc_router::RpcParams;
 use url::Url;
-use std::path::PathBuf;
+use std::path::Path;
 use std::fs;
-use std::time::{SystemTime, Duration};
+use std::time::SystemTime;
 use serde_json::json;
+use serde::{Deserialize, Serialize};
 
 pub async fn resources_list(
     _request: Option<ListResourcesRequest>,
@@ -47,24 +49,34 @@ pub async fn resource_read(request: ReadResourceRequest) -> HandlerResult<ReadRe
     Ok(response)
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, RpcParams)]
 pub struct ListDirectoryRequest {
     pub path: String,
 }
 
 pub async fn list_directory(request: ListDirectoryRequest) -> HandlerResult<ReadResourceResult> {
-    let path = PathBuf::from(&request.path);
+    let path = Path::new(&request.path);
     
     if !path.exists() {
-        return Err(JsonRpcError::invalid_params(format!(
-            "Directory does not exist: {}", path.display()
-        )));
+        return Ok(ReadResourceResult {
+            content: ResourceContent {
+                uri: Url::parse(&format!("file://{}", path.display())).unwrap(),
+                mime_type: Some("text/plain".to_string()),
+                text: Some(format!("Directory does not exist: {}", path.display())),
+                blob: None,
+            },
+        });
     }
     
     if !path.is_dir() {
-        return Err(JsonRpcError::invalid_params(format!(
-            "Path is not a directory: {}", path.display()
-        )));
+        return Ok(ReadResourceResult {
+            content: ResourceContent {
+                uri: Url::parse(&format!("file://{}", path.display())).unwrap(),
+                mime_type: Some("text/plain".to_string()),
+                text: Some(format!("Path is not a directory: {}", path.display())),
+                blob: None,
+            },
+        });
     }
 
     let mut entries = Vec::new();
@@ -89,9 +101,14 @@ pub async fn list_directory(request: ListDirectoryRequest) -> HandlerResult<Read
                 }
             }
         }
-        Err(e) => return Err(JsonRpcError::internal_error(format!(
-            "Failed to read directory: {}", e
-        ))),
+        Err(e) => return Ok(ReadResourceResult {
+            content: ResourceContent {
+                uri: Url::parse(&format!("file://{}", path.display())).unwrap(),
+                mime_type: Some("text/plain".to_string()),
+                text: Some(format!("Failed to read directory: {}", e)),
+                blob: None,
+            },
+        }),
     }
 
     Ok(ReadResourceResult {
@@ -104,18 +121,23 @@ pub async fn list_directory(request: ListDirectoryRequest) -> HandlerResult<Read
     })
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize, RpcParams)]
 pub struct GetFileInfoRequest {
     pub path: String,
 }
 
 pub async fn get_file_info(request: GetFileInfoRequest) -> HandlerResult<ReadResourceResult> {
-    let path = PathBuf::from(&request.path);
+    let path = Path::new(&request.path);
     
     if !path.exists() {
-        return Err(JsonRpcError::invalid_params(format!(
-            "File does not exist: {}", path.display()
-        )));
+        return Ok(ReadResourceResult {
+            content: ResourceContent {
+                uri: Url::parse(&format!("file://{}", path.display())).unwrap(),
+                mime_type: Some("text/plain".to_string()),
+                text: Some(format!("File does not exist: {}", path.display())),
+                blob: None,
+            },
+        });
     }
 
     match path.metadata() {
@@ -145,8 +167,13 @@ pub async fn get_file_info(request: GetFileInfoRequest) -> HandlerResult<ReadRes
                 },
             })
         }
-        Err(e) => Err(JsonRpcError::internal_error(format!(
-            "Failed to get file info: {}", e
-        ))),
+        Err(e) => Ok(ReadResourceResult {
+            content: ResourceContent {
+                uri: Url::parse(&format!("file://{}", path.display())).unwrap(),
+                mime_type: Some("text/plain".to_string()),
+                text: Some(format!("Failed to get file info: {}", e)),
+                blob: None,
+            },
+        }),
     }
 }

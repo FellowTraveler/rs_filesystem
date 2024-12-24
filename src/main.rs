@@ -4,6 +4,7 @@ use crate::mcp::prompts::prompts_get;
 use crate::mcp::prompts::prompts_list;
 use crate::mcp::resources::resource_read;
 use crate::mcp::resources::resources_list;
+use crate::mcp::resources::{list_directory, get_file_info};
 use crate::mcp::tools::register_tools;
 use crate::mcp::types::CancelledNotification;
 use crate::mcp::types::JsonRpcError;

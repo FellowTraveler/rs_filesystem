@@ -1,8 +1,8 @@
 use crate::mcp::types::*;
 use maplit::hashmap;
-use rpc_router::Handler;
-use rpc_router::HandlerResult;
 use rpc_router::RouterBuilder;
+use rpc_router::HandlerResult;
+use rpc_router::Handler;
 use rpc_router::RpcParams;
 use serde::Deserialize;
 use serde::Serialize;
@@ -234,44 +234,50 @@ pub async fn file_edit(request: FileEditRequest) -> HandlerResult<CallToolResult
     })
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Serialize, RpcParams)]
 pub struct CreateDirectoryRequest {
     pub path: String,
 }
 
 pub async fn create_directory(request: CreateDirectoryRequest) -> HandlerResult<CallToolResult> {
-    let path = PathBuf::from(&request.path);
+    let path = Path::new(&request.path);
     match std::fs::create_dir_all(&path) {
         Ok(_) => Ok(CallToolResult {
-            result: json!({
-                "success": true,
-                "path": path.to_string_lossy().to_string()
-            }),
+            content: vec![CallToolResultContent::Text { 
+                text: format!("Directory created successfully: {}", path.display()) 
+            }],
+            is_error: false,
         }),
-        Err(e) => Err(JsonRpcError::internal_error(format!(
-            "Failed to create directory: {}", e
-        ))),
+        Err(e) => Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { 
+                text: format!("Failed to create directory: {}", e) 
+            }],
+            is_error: true,
+        }),
     }
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize, Serialize, RpcParams)]
 pub struct OverwriteFileRequest {
     pub path: String,
     pub content: String,
 }
 
 pub async fn overwrite_file(request: OverwriteFileRequest) -> HandlerResult<CallToolResult> {
-    let path = PathBuf::from(&request.path);
-    match std::fs::write(&path, &request.content) {
+    let path = Path::new(&request.path);
+    match std::fs::write(path, &request.content) {
         Ok(_) => Ok(CallToolResult {
-            result: json!({
-                "success": true,
-                "path": path.to_string_lossy().to_string()
-            }),
+            content: vec![CallToolResultContent::Text { 
+                text: format!("File written successfully: {}", path.display()) 
+            }],
+            is_error: false,
         }),
-        Err(e) => Err(JsonRpcError::internal_error(format!(
-            "Failed to write file: {}", e
-        ))),
+        Err(e) => Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { 
+                text: format!("Failed to write file: {}", e) 
+            }],
+            is_error: true,
+        }),
     }
 }
 
