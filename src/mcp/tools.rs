@@ -20,6 +20,9 @@ pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
         .append_dyn("read_file", read_file.into_dyn())
         .append_dyn("create_directory", create_directory.into_dyn())
         .append_dyn("overwrite_file", overwrite_file.into_dyn())
+        .append_dyn("list_directory", list_directory.into_dyn())
+        .append_dyn("move_or_rename", move_or_rename.into_dyn())
+        .append_dyn("get_file_info", get_file_info.into_dyn())
 }
 
 pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<ListToolsResult> {
@@ -104,6 +107,56 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                         }
                     },
                     required: vec!["file_path".to_string()],
+                },
+            },
+            Tool {
+                name: "list_directory".to_string(),
+                description: Some("List contents of a directory".to_string()),
+                input_schema: ToolInputSchema {
+                    type_name: "object".to_string(),
+                    properties: hashmap! {
+                        "path".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Path to directory to list".to_owned()),
+                            enum_values: None,
+                        }
+                    },
+                    required: vec!["path".to_string()],
+                },
+            },
+            Tool {
+                name: "move_or_rename".to_string(),
+                description: Some("Move or rename a file or directory".to_string()),
+                input_schema: ToolInputSchema {
+                    type_name: "object".to_string(),
+                    properties: hashmap! {
+                        "source_path".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Source path to move/rename from".to_owned()),
+                            enum_values: None,
+                        },
+                        "target_path".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Target path to move/rename to".to_owned()),
+                            enum_values: None,
+                        }
+                    },
+                    required: vec!["source_path".to_string(), "target_path".to_string()],
+                },
+            },
+            Tool {
+                name: "get_file_info".to_string(),
+                description: Some("Get metadata about a file".to_string()),
+                input_schema: ToolInputSchema {
+                    type_name: "object".to_string(),
+                    properties: hashmap! {
+                        "path".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Path to file to get info about".to_owned()),
+                            enum_values: None,
+                        }
+                    },
+                    required: vec!["path".to_string()],
                 },
             },
             Tool {
@@ -297,6 +350,87 @@ pub async fn read_file(request: ReadFileRequest) -> HandlerResult<CallToolResult
         Err(e) => Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
                 text: format!("Error reading file: {}", e) 
+            }],
+            is_error: true,
+        }),
+    }
+}
+
+#[derive(Deserialize, Serialize, RpcParams)]
+pub struct ListDirectoryRequest {
+    pub path: String,
+}
+
+pub async fn list_directory(request: ListDirectoryRequest) -> HandlerResult<CallToolResult> {
+    let path = Path::new(&request.path);
+    match fs::read_dir(path) {
+        Ok(dir) => {
+            let mut content = String::new();
+            for entry in dir {
+                if let Ok(entry) = entry {
+                    content.push_str(&format!("{}\n", entry.file_name().to_string_lossy()));
+                }
+            }
+            Ok(CallToolResult {
+                content: vec![CallToolResultContent::Text { text: content }],
+                is_error: false,
+            })
+        },
+        Err(e) => Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { 
+                text: format!("Error listing directory: {}", e) 
+            }],
+            is_error: true,
+        }),
+    }
+}
+
+#[derive(Deserialize, Serialize, RpcParams)]
+pub struct MoveOrRenameRequest {
+    pub source_path: String,
+    pub target_path: String,
+}
+
+pub async fn move_or_rename(request: MoveOrRenameRequest) -> HandlerResult<CallToolResult> {
+    let source_path = Path::new(&request.source_path);
+    let target_path = Path::new(&request.target_path);
+    match fs::rename(source_path, target_path) {
+        Ok(_) => Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { 
+                text: format!("Moved or renamed successfully: {} to {}", source_path.display(), target_path.display()) 
+            }],
+            is_error: false,
+        }),
+        Err(e) => Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { 
+                text: format!("Failed to move or rename: {}", e) 
+            }],
+            is_error: true,
+        }),
+    }
+}
+
+#[derive(Deserialize, Serialize, RpcParams)]
+pub struct GetFileInfoRequest {
+    pub path: String,
+}
+
+pub async fn get_file_info(request: GetFileInfoRequest) -> HandlerResult<CallToolResult> {
+    let path = Path::new(&request.path);
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            let mut content = String::new();
+            content.push_str(&format!("File size: {}\n", metadata.len()));
+            content.push_str(&format!("File type: {}\n", metadata.file_type()));
+            content.push_str(&format!("Last modified: {}\n", metadata.modified().unwrap()));
+            Ok(CallToolResult {
+                content: vec![CallToolResultContent::Text { text: content }],
+                is_error: false,
+            })
+        },
+        Err(e) => Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { 
+                text: format!("Error getting file info: {}", e) 
             }],
             is_error: true,
         }),

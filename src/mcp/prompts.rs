@@ -20,13 +20,93 @@ pub async fn prompts_list(
                 }]),
             },
             Prompt {
-                name: "analyze-code".to_string(),
-                description: Some("Analyze code for potential improvements".to_string()),
+                name: "get_local_time".to_string(),
+                description: Some("Get the current local time".to_string()),
+                arguments: None,
+            },
+            Prompt {
+                name: "file_edit".to_string(),
+                description: Some("Make a targeted edit to a file".to_string()),
+                arguments: Some(vec![
+                    PromptArgument {
+                        name: "file_path".to_string(),
+                        description: Some("Path to file to edit".to_string()),
+                        required: Some(true),
+                    },
+                    PromptArgument {
+                        name: "commit_message".to_string(),
+                        description: Some("Message describing the edit".to_string()),
+                        required: Some(true),
+                    },
+                ]),
+            },
+            Prompt {
+                name: "read_file".to_string(),
+                description: Some("Read contents of a file".to_string()),
                 arguments: Some(vec![PromptArgument {
-                    name: "language".to_string(),
-                    description: Some("Programming language".to_string()),
+                    name: "file_path".to_string(),
+                    description: Some("Path to file to read".to_string()),
                     required: Some(true),
                 }]),
+            },
+            Prompt {
+                name: "list_directory".to_string(),
+                description: Some("List contents of a directory".to_string()),
+                arguments: Some(vec![PromptArgument {
+                    name: "path".to_string(),
+                    description: Some("Path to directory to list".to_string()),
+                    required: Some(true),
+                }]),
+            },
+            Prompt {
+                name: "move_or_rename".to_string(),
+                description: Some("Move or rename a file or directory".to_string()),
+                arguments: Some(vec![
+                    PromptArgument {
+                        name: "source_path".to_string(),
+                        description: Some("Source path to move/rename from".to_string()),
+                        required: Some(true),
+                    },
+                    PromptArgument {
+                        name: "target_path".to_string(),
+                        description: Some("Target path to move/rename to".to_string()),
+                        required: Some(true),
+                    },
+                ]),
+            },
+            Prompt {
+                name: "get_file_info".to_string(),
+                description: Some("Get metadata about a file".to_string()),
+                arguments: Some(vec![PromptArgument {
+                    name: "path".to_string(),
+                    description: Some("Path to file to get info about".to_string()),
+                    required: Some(true),
+                }]),
+            },
+            Prompt {
+                name: "create_directory".to_string(),
+                description: Some("Create a new directory".to_string()),
+                arguments: Some(vec![PromptArgument {
+                    name: "path".to_string(),
+                    description: Some("Path to directory to create".to_string()),
+                    required: Some(true),
+                }]),
+            },
+            Prompt {
+                name: "overwrite_file".to_string(),
+                description: Some("Overwrite contents of a file".to_string()),
+                arguments: Some(vec![
+                    PromptArgument {
+                        name: "file_path".to_string(),
+                        description: Some("Path to file to overwrite".to_string()),
+                        required: Some(true),
+                    },
+                    PromptArgument {
+                        name: "content".to_string(),
+                        description: Some("New content for the file".to_string()),
+                        required: Some(true),
+                    },
+                ]),
             },
         ],
     };
@@ -48,9 +128,110 @@ pub async fn prompts_get(request: GetPromptRequest) -> HandlerResult<PromptResul
                 },
             }]),
         },
-        _ => {
-            return Err(json!({"code": -32602, "message": "Prompt not found"}).into_handler_error())
-        }
+        "get_local_time" => PromptResult {
+            description: "Get the current local time".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: "What's the current local time?".to_string(),
+                },
+            }]),
+        },
+        "file_edit" => PromptResult {
+            description: "Edit a file".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: format!(
+                        "Edit file {} with message: {}",
+                        request.arguments.unwrap()["file_path"].as_str().unwrap(),
+                        request.arguments.unwrap()["commit_message"].as_str().unwrap()
+                    ),
+                },
+            }]),
+        },
+        "read_file" => PromptResult {
+            description: "Read a file".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: format!(
+                        "Read file {}",
+                        request.arguments.unwrap()["file_path"].as_str().unwrap()
+                    ),
+                },
+            }]),
+        },
+        "list_directory" => PromptResult {
+            description: "List directory contents".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: format!(
+                        "List contents of directory {}",
+                        request.arguments.unwrap()["path"].as_str().unwrap()
+                    ),
+                },
+            }]),
+        },
+        "move_or_rename" => PromptResult {
+            description: "Move or rename file/directory".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: format!(
+                        "Move/rename {} to {}",
+                        request.arguments.unwrap()["source_path"].as_str().unwrap(),
+                        request.arguments.unwrap()["target_path"].as_str().unwrap()
+                    ),
+                },
+            }]),
+        },
+        "get_file_info" => PromptResult {
+            description: "Get file metadata".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: format!(
+                        "Get info about file {}",
+                        request.arguments.unwrap()["path"].as_str().unwrap()
+                    ),
+                },
+            }]),
+        },
+        "create_directory" => PromptResult {
+            description: "Create directory".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: format!(
+                        "Create directory {}",
+                        request.arguments.unwrap()["path"].as_str().unwrap()
+                    ),
+                },
+            }]),
+        },
+        "overwrite_file" => PromptResult {
+            description: "Overwrite file".to_string(),
+            messages: Some(vec![PromptMessage {
+                role: "user".to_string(),
+                content: PromptMessageContent {
+                    type_name: "text".to_string(),
+                    text: format!(
+                        "Overwrite file {} with new content",
+                        request.arguments.unwrap()["file_path"].as_str().unwrap()
+                    ),
+                },
+            }]),
+        },
+        _ => return Err("Unknown prompt".into()),
     };
     Ok(response)
 }
