@@ -10,7 +10,6 @@ use std::fs;
 use std::path::Path;
 use git2::{Repository, Signature};
 use crate::mcp::utilities::{validate_path_or_error, validate_paths_or_error, is_path_allowed};
-use crate::mcp::utilities::notify;
 
 /// register all tools to the router
 pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
@@ -545,7 +544,8 @@ mod tests {
     use std::path::Path;
     use tempfile::TempDir;
     use serde_json::json;
-    
+    use crate::mcp::utilities::notify;
+
     fn setup_test_env() -> (TempDir, String) {
         let _temp_dir = TempDir::new().unwrap();
         let canonical_path = _temp_dir.path().canonicalize().unwrap();
@@ -625,6 +625,12 @@ mod tests {
         };
 
         let result = file_edit(request).await.unwrap();
+        if result.is_error {
+            notify("logging/message", Some(json!({
+                "message": format!("File edit error: {:?}", result.content),
+                "level": "error"
+            })));
+        }
         assert!(!result.is_error, "file_edit failed: {:?}", result.content);
 
         // Verify file content
