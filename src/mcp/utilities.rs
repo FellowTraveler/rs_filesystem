@@ -15,6 +15,7 @@ pub fn get_allowed_directories() -> Vec<String> {
         .map(String::from)
         .collect()
 }
+
 /// handler for `initialize` request from client
 pub async fn initialize(_request: InitializeRequest) -> HandlerResult<InitializeResult> {
     let result = InitializeResult {
@@ -79,31 +80,46 @@ pub fn notify(method: &str, params: Option<Value>) {
     println!("{}", serde_json::to_string(&notification).unwrap());
 }
 
-
 pub fn is_path_allowed(path: &Path) -> bool {
     let allowed_dirs = get_allowed_directories();
     if allowed_dirs.is_empty() {
         return false; // If no directories are explicitly allowed, deny all access
     }
 
-    // Canonicalize the input path to resolve any .. or symlinks
-    let canonical_path = match path.canonicalize() {
-        Ok(p) => p,
-        Err(_) => return false, // If we can't canonicalize, assume it's not allowed
-    };
-
-    // Check if the canonical path starts with any of the allowed directories
-    for allowed_dir in allowed_dirs {
-        let allowed_path = Path::new(&allowed_dir);
-        let canonical_allowed = match allowed_path.canonicalize() {
-            Ok(p) => p,
-            Err(_) => continue, // Skip invalid allowed directories
+    // Get all parent directories of the path, including itself
+    let mut check_path = path.to_path_buf();
+    loop {
+        // Try to canonicalize the current path if it exists
+        let canonical_check = if check_path.exists() {
+            match check_path.canonicalize() {
+                Ok(p) => p,
+                Err(_) => check_path.clone(),
+            }
+        } else {
+            check_path.clone()
         };
 
-        // Try both the canonical path and the original path
-        if canonical_path.starts_with(&canonical_allowed) || 
-           canonical_path.starts_with(allowed_path) {
-            return true;
+        // Check if this path or parent is allowed
+        for allowed_dir in &allowed_dirs {
+            let allowed_path = Path::new(allowed_dir);
+            let canonical_allowed = if allowed_path.exists() {
+                match allowed_path.canonicalize() {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                }
+            } else {
+                continue;
+            };
+
+            if canonical_check.starts_with(&canonical_allowed) {
+                return true;
+            }
+        }
+
+        // Move up to parent directory
+        match check_path.parent() {
+            Some(parent) => check_path = parent.to_path_buf(),
+            None => break,
         }
     }
 
