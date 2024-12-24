@@ -54,42 +54,37 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                     required: vec![],
                 },
             },
+
             Tool {
                 name: "file_edit".to_string(),
-                description: Some("Make a targeted edit to a file with optional git commit".to_string()),
+                description: Some("Replace exact text content in a file with optional git commit. Returns error if content not found or if there are multiple matches.".to_string()),
                 input_schema: ToolInputSchema {
                     type_name: "object".to_string(),
                     properties: hashmap! {
                         "file_path".to_string() => ToolInputSchemaProperty {
-                            type_name: Some("string".to_owned()),
-                            description: Some("Path to the file to edit".to_owned()),
+                            type_name: Some("string".to_string()),
+                            description: Some("Path to the file to edit".to_string()),
                             enum_values: None,
                         },
-                        "start_line".to_string() => ToolInputSchemaProperty {
-                            type_name: Some("integer".to_owned()),
-                            description: Some("Starting line number for the edit (0-based)".to_owned()),
-                            enum_values: None,
-                        },
-                        "end_line".to_string() => ToolInputSchemaProperty {
-                            type_name: Some("integer".to_owned()),
-                            description: Some("Ending line number for the edit (0-based)".to_owned()),
+                        "old_content".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_string()),
+                            description: Some("Exact content to replace (must match uniquely)".to_string()),
                             enum_values: None,
                         },
                         "new_content".to_string() => ToolInputSchemaProperty {
-                            type_name: Some("string".to_owned()),
-                            description: Some("New content to insert".to_owned()),
+                            type_name: Some("string".to_string()),
+                            description: Some("Content to insert instead".to_string()),
                             enum_values: None,
                         },
                         "commit_message".to_string() => ToolInputSchemaProperty {
-                            type_name: Some("string".to_owned()),
-                            description: Some("Message describing the purpose of this edit".to_owned()),
+                            type_name: Some("string".to_string()),
+                            description: Some("Message describing the purpose of this edit".to_string()),
                             enum_values: None,
                         }
                     },
                     required: vec![
                         "file_path".to_string(),
-                        "start_line".to_string(),
-                        "end_line".to_string(),
+                        "old_content".to_string(),
                         "new_content".to_string(),
                         "commit_message".to_string()
                     ],
@@ -228,12 +223,10 @@ pub async fn get_local_time(_request: GetLocalTimeRequest) -> HandlerResult<Call
 #[derive(Deserialize, Serialize, RpcParams)]
 pub struct FileEditRequest {
     pub file_path: String,
-    pub start_line: usize,
-    pub end_line: usize,
+    pub old_content: String,
     pub new_content: String,
     pub commit_message: String,
 }
-
 
 pub async fn file_edit(request: FileEditRequest) -> HandlerResult<CallToolResult> {
     // Validate path is within allowed directories
@@ -256,25 +249,22 @@ pub async fn file_edit(request: FileEditRequest) -> HandlerResult<CallToolResult
         }),
     };
 
-    // Split into lines
-    let mut lines: Vec<String> = content.lines().map(String::from).collect();
-
-    // Validate line range
-    if request.start_line > request.end_line || request.end_line >= lines.len() {
+    // Count matches of old_content
+    let matches = content.matches(&request.old_content).count();
+    if matches == 0 || matches > 1 {
         return Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
-                text: format!("Invalid line range: {} to {}", request.start_line, request.end_line) 
+                text: format!("Found {} matches of content - must match exactly once", matches) 
             }],
             is_error: true,
         });
     }
 
-    // Replace lines with new content
-    let new_lines: Vec<String> = request.new_content.lines().map(String::from).collect();
-    lines.splice(request.start_line..=request.end_line, new_lines);
+    // Replace content
+    let new_content = content.replace(&request.old_content, &request.new_content);
 
     // Write back to file
-    if let Err(e) = fs::write(path, lines.join("\n")) {
+    if let Err(e) = fs::write(path, new_content) {
         return Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
                 text: format!("Error writing file: {}", e) 
@@ -618,8 +608,7 @@ mod tests {
 
         let request = FileEditRequest {
             file_path: file_path.clone(),
-            start_line: 0,
-            end_line: 0,
+            old_content: "initial content\n".to_string(),
             new_content: "modified content".to_string(),
             commit_message: "Test commit".to_string(),
         };
@@ -708,8 +697,7 @@ mod tests {
         // Edit the file
         let request = FileEditRequest {
             file_path: canonical_file_path.to_str().unwrap().to_string(),
-            start_line: 0,
-            end_line: 0,
+            old_content: "initial content\n".to_string(),
             new_content: "modified content".to_string(),
             commit_message: "".to_string(),
         };
