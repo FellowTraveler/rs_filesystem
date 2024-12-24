@@ -10,6 +10,7 @@ use std::fs;
 use std::path::Path;
 use git2::{Repository, Signature};
 use crate::mcp::utilities::{validate_path_or_error, validate_paths_or_error, is_path_allowed};
+use crate::mcp::utilities::notify;
 
 /// register all tools to the router
 pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
@@ -539,50 +540,19 @@ fn commit_to_git(repo_path: &str, file_path: &Path, message: &str) -> Result<(),
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::env;
     use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
-    use std::env;
-
+    use serde_json::json;
+    
     fn setup_test_env() -> (TempDir, String) {
         let _temp_dir = TempDir::new().unwrap();
         let canonical_path = _temp_dir.path().canonicalize().unwrap();
         let _temp_path = canonical_path.to_str().unwrap().to_string();
-        
-        // On macOS, we need to allow both the /var and /private/var paths
-        #[cfg(target_os = "macos")]
-        {
-            // Always allow both /var and /private/var paths if applicable
-            let (var_path, private_var_path) = if _temp_path.starts_with("/private/var") {
-                (_temp_path.strip_prefix("/private").unwrap().to_string(), _temp_path.clone())
-            } else if _temp_path.starts_with("/var") {
-                (_temp_path.clone(), format!("/private{}", _temp_path))
-            } else {
-                (_temp_path.clone(), _temp_path.clone())
-            };
-            
-            // Set both paths in the environment variable
-            env::set_var(
-                "MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES",
-                if var_path != private_var_path {
-                    format!("{}:{}", var_path, private_var_path)
-                } else {
-                    var_path
-                }
-            );
-        }
-    
-        #[cfg(not(target_os = "macos"))]
-        {
-            env::set_var(
-                "MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES",
-                &_temp_path
-            );
-        }
-        
         (_temp_dir, _temp_path)
     }
-    
+
     fn setup_git_repo() -> (TempDir, String) {
         let (_temp_dir, _temp_path) = setup_test_env();
         
@@ -611,37 +581,123 @@ mod tests {
     async fn test_file_edit_with_git() {
         let (_temp_dir, file_path) = setup_git_repo();
         
+        // Set up allowed directories
+        #[cfg(target_os = "macos")]
+        {
+            let temp_path = _temp_dir.path().canonicalize().unwrap().to_str().unwrap().to_string();
+            let (var_path, private_var_path) = if temp_path.starts_with("/private/var") {
+                (temp_path.strip_prefix("/private").unwrap().to_string(), temp_path.clone())
+            } else if temp_path.starts_with("/var") {
+                (temp_path.clone(), format!("/private{}", temp_path))
+            } else {
+                (temp_path.clone(), temp_path.clone())
+            };
+            
+            notify("logging/message", Some(json!({
+                "message": format!("Var path: {}, Private var path: {}", var_path, private_var_path),
+                "level": "debug"
+            })));
+            
+            let allowed_dirs = if var_path != private_var_path {
+                format!("{}:{}", var_path, private_var_path)
+            } else {
+                var_path
+            };
+            notify("logging/message", Some(json!({
+                "message": format!("Setting allowed directories: {}", allowed_dirs),
+                "level": "debug"
+            })));
+            env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", allowed_dirs);
+        }
+        
+        #[cfg(not(target_os = "macos"))]
+        {
+            let temp_path = _temp_dir.path().canonicalize().unwrap().to_str().unwrap().to_string();
+            env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", &temp_path);
+        }
+
         let request = FileEditRequest {
             file_path: file_path.clone(),
             start_line: 0,
             end_line: 0,
             new_content: "modified content".to_string(),
-            commit_message: "test commit".to_string(),
+            commit_message: "Test commit".to_string(),
         };
 
         let result = file_edit(request).await.unwrap();
         assert!(!result.is_error, "file_edit failed: {:?}", result.content);
-        
-        // Verify file was modified
-        let content = fs::read_to_string(&file_path).unwrap();
+
+        // Verify file content
+        let content = fs::read_to_string(file_path).unwrap();
         assert_eq!(content, "modified content");
         
         // Verify git commit happened
         let repo = git2::Repository::open(_temp_dir.path()).unwrap();
         let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
-        assert_eq!(head_commit.message().unwrap(), "test commit");
+        assert_eq!(head_commit.message().unwrap(), "Test commit");
     }
 
     #[tokio::test]
     async fn test_file_edit_without_git() {
         let (_temp_dir, _temp_path) = setup_test_env();
+        notify("logging/message", Some(json!({
+            "message": format!("Test env temp path: {}", _temp_path),
+            "level": "debug"
+        })));
+        
+        // Set up allowed directories
+        #[cfg(target_os = "macos")]
+        {
+            let (var_path, private_var_path) = if _temp_path.starts_with("/private/var") {
+                (_temp_path.strip_prefix("/private").unwrap().to_string(), _temp_path.clone())
+            } else if _temp_path.starts_with("/var") {
+                (_temp_path.clone(), format!("/private{}", _temp_path))
+            } else {
+                (_temp_path.clone(), _temp_path.clone())
+            };
+            
+            notify("logging/message", Some(json!({
+                "message": format!("Var path: {}, Private var path: {}", var_path, private_var_path),
+                "level": "debug"
+            })));
+            
+            let allowed_dirs = if var_path != private_var_path {
+                format!("{}:{}", var_path, private_var_path)
+            } else {
+                var_path
+            };
+            notify("logging/message", Some(json!({
+                "message": format!("Setting allowed directories: {}", allowed_dirs),
+                "level": "debug"
+            })));
+            env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", allowed_dirs);
+        }
+        
+        #[cfg(not(target_os = "macos"))]
+        {
+            env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", &_temp_path);
+        }
         
         // Create test file in the temp directory
         let test_file_path = Path::new(&_temp_path).join("test.txt");
         fs::write(&test_file_path, "initial content\n").unwrap();
+        notify("logging/message", Some(json!({
+            "message": format!("Test file path: {}", test_file_path.display()),
+            "level": "debug"
+        })));
         
         // Canonicalize the file path after creating it
         let canonical_file_path = test_file_path.canonicalize().unwrap();
+        notify("logging/message", Some(json!({
+            "message": format!("Canonical file path: {}", canonical_file_path.display()),
+            "level": "debug"
+        })));
+        
+        // Print allowed directories
+        notify("logging/message", Some(json!({
+            "message": format!("Allowed directories: {}", std::env::var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES").unwrap_or_default()),
+            "level": "debug"
+        })));
         
         // Edit the file
         let request = FileEditRequest {
@@ -653,6 +709,12 @@ mod tests {
         };
         
         let result = file_edit(request).await.unwrap();
+        if result.is_error {
+            notify("logging/message", Some(json!({
+                "message": format!("File edit error: {:?}", result.content),
+                "level": "error"
+            })));
+        }
         assert!(!result.is_error);
         
         // Verify file content
