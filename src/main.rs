@@ -6,6 +6,7 @@ use crate::mcp::resources::resource_read;
 use crate::mcp::resources::resources_list;
 use crate::mcp::resources::{allowed_directories};
 use crate::mcp::tools::register_tools;
+use crate::mcp::tools::tools_list;
 use crate::mcp::types::CancelledNotification;
 use crate::mcp::types::JsonRpcError;
 use crate::mcp::types::JsonRpcResponse;
@@ -75,7 +76,7 @@ async fn main() {
     // Parse command-line arguments
     let args = Args::parse();
     if !args.mcp {
-        display_info(&args);
+        display_info(&args).await;
         return;
     }
 
@@ -230,30 +231,45 @@ impl Args {
     }
 }
 
-fn display_info(args: &Args) {
+async fn display_info(args: &Args) {
     if !args.is_args_available() {
         println!("Please use --help to see available options");
         return;
     }
+
     if args.prompts {
-        println!(
-            r#"prompts:
-    - current_time: get current time in city
-    "#
-        );
+        if let Ok(result) = prompts_list(None).await {
+            println!("prompts:");
+            for prompt in result.prompts {
+                println!("    - {}: {}", 
+                    prompt.name,
+                    prompt.description.unwrap_or_default()
+                );
+            }
+        }
     }
+
     if args.resources {
-        println!(
-            r#"resources:
-    - sqlite: file:///path/to/sqlite.db
-    "#
-        );
+        if let Ok(result) = resources_list(None).await {
+            println!("resources:");
+            for resource in result.resources {
+                println!("    - {}: {}", 
+                    resource.name,
+                    resource.uri
+                );
+            }
+        }
     }
+
     if args.tools {
-        println!(
-            r#"tools:
-    - get_current_time_in_city: get current time in city
-    "#
-        );
+        if let Ok(result) = tools_list(None).await {
+            println!("tools:");
+            for tool in result.tools {
+                println!("    - {}: {}", 
+                    tool.name,
+                    tool.description.unwrap_or_default()
+                );
+            }
+        }
     }
 }
