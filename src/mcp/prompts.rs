@@ -123,7 +123,7 @@ pub async fn prompts_get(request: GetPromptRequest) -> HandlerResult<PromptResul
                     type_name: "text".to_string(),
                     text: format!(
                         "What's the time of {}?",
-                        request.arguments.unwrap()["city"].as_str().unwrap()
+                        request.arguments.as_ref().unwrap()["city"].as_str().unwrap()
                     ),
                 },
             }]),
@@ -146,8 +146,8 @@ pub async fn prompts_get(request: GetPromptRequest) -> HandlerResult<PromptResul
                     type_name: "text".to_string(),
                     text: format!(
                         "Edit file {} with message: {}",
-                        request.arguments.unwrap()["file_path"].as_str().unwrap(),
-                        request.arguments.unwrap()["commit_message"].as_str().unwrap()
+                        request.arguments.as_ref().unwrap()["file_path"].as_str().unwrap(),
+                        request.arguments.as_ref().unwrap()["commit_message"].as_str().unwrap()
                     ),
                 },
             }]),
@@ -160,7 +160,7 @@ pub async fn prompts_get(request: GetPromptRequest) -> HandlerResult<PromptResul
                     type_name: "text".to_string(),
                     text: format!(
                         "Read file {}",
-                        request.arguments.unwrap()["file_path"].as_str().unwrap()
+                        request.arguments.as_ref().unwrap()["file_path"].as_str().unwrap()
                     ),
                 },
             }]),
@@ -173,7 +173,7 @@ pub async fn prompts_get(request: GetPromptRequest) -> HandlerResult<PromptResul
                     type_name: "text".to_string(),
                     text: format!(
                         "List contents of directory {}",
-                        request.arguments.unwrap()["path"].as_str().unwrap()
+                        request.arguments.as_ref().unwrap()["path"].as_str().unwrap()
                     ),
                 },
             }]),
@@ -186,8 +186,8 @@ pub async fn prompts_get(request: GetPromptRequest) -> HandlerResult<PromptResul
                     type_name: "text".to_string(),
                     text: format!(
                         "Move/rename {} to {}",
-                        request.arguments.unwrap()["source_path"].as_str().unwrap(),
-                        request.arguments.unwrap()["target_path"].as_str().unwrap()
+                        request.arguments.as_ref().unwrap()["source_path"].as_str().unwrap(),
+                        request.arguments.as_ref().unwrap()["target_path"].as_str().unwrap()
                     ),
                 },
             }]),
@@ -199,39 +199,41 @@ pub async fn prompts_get(request: GetPromptRequest) -> HandlerResult<PromptResul
                 content: PromptMessageContent {
                     type_name: "text".to_string(),
                     text: format!(
-                        "Get info about file {}",
-                        request.arguments.unwrap()["path"].as_str().unwrap()
+                        "Get info for {}",
+                        request.arguments.as_ref().unwrap()["path"].as_str().unwrap()
                     ),
                 },
             }]),
         },
         "create_directory" => PromptResult {
-            description: "Create directory".to_string(),
+            description: "Create a new directory".to_string(),
             messages: Some(vec![PromptMessage {
                 role: "user".to_string(),
                 content: PromptMessageContent {
                     type_name: "text".to_string(),
                     text: format!(
                         "Create directory {}",
-                        request.arguments.unwrap()["path"].as_str().unwrap()
+                        request.arguments.as_ref().unwrap()["path"].as_str().unwrap()
                     ),
                 },
             }]),
         },
         "overwrite_file" => PromptResult {
-            description: "Overwrite file".to_string(),
+            description: "Overwrite file contents".to_string(),
             messages: Some(vec![PromptMessage {
                 role: "user".to_string(),
                 content: PromptMessageContent {
                     type_name: "text".to_string(),
                     text: format!(
-                        "Overwrite file {} with new content",
-                        request.arguments.unwrap()["file_path"].as_str().unwrap()
+                        "Overwrite {} with new content",
+                        request.arguments.as_ref().unwrap()["file_path"].as_str().unwrap()
                     ),
                 },
             }]),
         },
-        _ => return Err("Unknown prompt".into()),
+        _ => {
+            return Err(json!({"code": -32602, "message": "Prompt not found"}).into_handler_error())
+        }
     };
     Ok(response)
 }

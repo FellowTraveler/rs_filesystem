@@ -18,11 +18,11 @@ pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
         .append_dyn("get_local_time", get_local_time.into_dyn())
         .append_dyn("file_edit", file_edit.into_dyn())
         .append_dyn("read_file", read_file.into_dyn())
-        .append_dyn("create_directory", create_directory.into_dyn())
-        .append_dyn("overwrite_file", overwrite_file.into_dyn())
         .append_dyn("list_directory", list_directory.into_dyn())
         .append_dyn("move_or_rename", move_or_rename.into_dyn())
         .append_dyn("get_file_info", get_file_info.into_dyn())
+        .append_dyn("create_directory", create_directory.into_dyn())
+        .append_dyn("overwrite_file", overwrite_file.into_dyn())
 }
 
 pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<ListToolsResult> {
@@ -421,8 +421,10 @@ pub async fn get_file_info(request: GetFileInfoRequest) -> HandlerResult<CallToo
         Ok(metadata) => {
             let mut content = String::new();
             content.push_str(&format!("File size: {}\n", metadata.len()));
-            content.push_str(&format!("File type: {}\n", metadata.file_type()));
-            content.push_str(&format!("Last modified: {}\n", metadata.modified().unwrap()));
+            content.push_str(&format!("File type: {:?}\n", metadata.file_type()));
+            if let Ok(modified) = metadata.modified() {
+                content.push_str(&format!("Last modified: {:?}\n", modified));
+            }
             Ok(CallToolResult {
                 content: vec![CallToolResultContent::Text { text: content }],
                 is_error: false,

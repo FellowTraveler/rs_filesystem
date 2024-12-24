@@ -1,6 +1,7 @@
 use crate::mcp::types::*;
 use rpc_router::HandlerResult;
 use rpc_router::RpcParams;
+use rpc_router::IntoHandlerError;
 use url::Url;
 use std::path::Path;
 use std::fs;
@@ -44,13 +45,32 @@ pub async fn resources_list(
 }
 
 pub async fn resource_read(request: ReadResourceRequest) -> HandlerResult<ReadResourceResult> {
-    let response = ReadResourceResult {
-        content: ResourceContent {
-            uri: request.uri.clone(),
-            mime_type: Some("text/plain".to_string()),
-            text: Some("2024-11-28T08:19:18.974368Z,INFO,main,this is message".to_string()),
-            blob: None,
+    let response = match request.uri.path() {
+        "/logs/app.log" => ReadResourceResult {
+            content: ResourceContent {
+                uri: request.uri.clone(),
+                mime_type: Some("text/plain".to_string()),
+                text: Some("2024-11-28T08:19:18.974368Z,INFO,main,this is message".to_string()),
+                blob: None,
+            },
         },
+        "/api/allowed_directories" => {
+            let allowed_dirs = std::env::var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES")
+                .unwrap_or_default()
+                .split(':')
+                .map(String::from)
+                .collect::<Vec<_>>();
+
+            ReadResourceResult {
+                content: ResourceContent {
+                    uri: request.uri.clone(),
+                    mime_type: Some("application/json".to_string()),
+                    text: Some(serde_json::to_string_pretty(&allowed_dirs).unwrap()),
+                    blob: None,
+                },
+            }
+        },
+        _ => return Err(json!({"code": -32602, "message": "Resource not found"}).into_handler_error()),
     };
     Ok(response)
 }
