@@ -1,22 +1,108 @@
 [
   {
-    "name": "current-time",
+    "name": "current_time",
     "description": "Display current time in the city",
     "arguments": [
       {
         "name": "city",
-        "description": "City name",
+        "description": "city name",
         "required": true
       }
     ]
   },
   {
-    "name": "analyze-code",
-    "description": "Analyze code for potential improvements",
+    "name": "get_local_time",
+    "description": "Get the current local time",
+    "arguments": null
+  },
+  {
+    "name": "file_edit",
+    "description": "Make a targeted edit to a file",
     "arguments": [
       {
-        "name": "language",
-        "description": "Programming language",
+        "name": "file_path",
+        "description": "Path to file to edit",
+        "required": true
+      },
+      {
+        "name": "commit_message",
+        "description": "Message describing the edit",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "read_file",
+    "description": "Read contents of a file",
+    "arguments": [
+      {
+        "name": "file_path",
+        "description": "Path to file to read",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "list_directory",
+    "description": "List contents of a directory",
+    "arguments": [
+      {
+        "name": "path",
+        "description": "Path to directory to list",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "move_or_rename",
+    "description": "Move or rename a file or directory",
+    "arguments": [
+      {
+        "name": "source_path",
+        "description": "Source path to move/rename from",
+        "required": true
+      },
+      {
+        "name": "target_path",
+        "description": "Target path to move/rename to",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "get_file_info",
+    "description": "Get metadata about a file",
+    "arguments": [
+      {
+        "name": "path",
+        "description": "Path to file to get info about",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "create_directory",
+    "description": "Create a new directory",
+    "arguments": [
+      {
+        "name": "path",
+        "description": "Path to directory to create",
+        "required": true
+      }
+    ]
+  },
+  {
+    "name": "overwrite_file",
+    "description": "Overwrite contents of a file",
+    "arguments": [
+      {
+        "name": "file_path",
+        "description": "Path to file to overwrite",
+        "required": true
+      },
+      {
+        "name": "content",
+        "description": "New content for the file",
         "required": true
       }
     ]

@@ -1,22 +1,20 @@
 [
   {
     "name": "get_current_time_in_city",
-    "description": "Display current time in the city",
+    "description": "Get the current time in the city",
     "inputSchema": {
       "type": "object",
       "properties": {
         "city": {
           "type": "string",
-          "description": "City name"
+          "description": "city name"
         }
       },
-      "required": [
-        "city"
-      ]
+      "required": ["city"]
     }
   },
   {
-    "name": "get_local_time",
+    "name": "get_local_time", 
     "description": "Get the current local time",
     "inputSchema": {
       "type": "object",
@@ -26,7 +24,7 @@
   },
   {
     "name": "file_edit",
-    "description": "Make a targeted edit to a file with optional git commit",
+    "description": "Replace exact text content in a file with optional git commit. Returns error if content not found or if there are multiple matches.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -34,36 +32,27 @@
           "type": "string",
           "description": "Path to the file to edit"
         },
-        "start_line": {
-          "type": "integer",
-          "description": "Starting line number for the edit (0-based)"
-        },
-        "end_line": {
-          "type": "integer",
-          "description": "Ending line number for the edit (0-based)"
+        "old_content": {
+          "type": "string", 
+          "description": "Exact content to replace (must match uniquely)"
         },
         "new_content": {
           "type": "string",
-          "description": "New content to insert"
+          "description": "Content to insert instead"
         },
         "commit_message": {
           "type": "string",
-          "description": "Optional git commit message. If provided, changes will be committed"
+          "description": "Message describing the purpose of this edit"
         }
       },
-      "required": [
-        "file_path",
-        "start_line",
-        "end_line",
-        "new_content"
-      ]
+      "required": ["file_path", "old_content", "new_content", "commit_message"]
     }
   },
   {
     "name": "read_file",
     "description": "Read the contents of a file",
     "inputSchema": {
-      "type": "object",
+      "type": "object", 
       "properties": {
         "file_path": {
           "type": "string",
@@ -71,6 +60,96 @@
         }
       },
       "required": ["file_path"]
+    }
+  },
+  {
+    "name": "list_directory",
+    "description": "List contents of a directory",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to directory to list"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "move_or_rename",
+    "description": "Move or rename a file or directory",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "source_path": {
+          "type": "string",
+          "description": "Source path to move/rename from"
+        },
+        "target_path": {
+          "type": "string",
+          "description": "Target path to move/rename to"
+        },
+        "commit_message": {
+          "type": "string",
+          "description": "Message describing the purpose of this move/rename"
+        }
+      },
+      "required": ["source_path", "target_path", "commit_message"]
+    }
+  },
+  {
+    "name": "get_file_info",
+    "description": "Get metadata about a file",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to file to get info about"
+        }
+      },
+      "required": ["path"]
+    }
+  },
+  {
+    "name": "create_directory",
+    "description": "Create a new directory",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the new directory"
+        },
+        "commit_message": {
+          "type": "string",
+          "description": "Message describing the purpose of this directory creation"
+        }
+      },
+      "required": ["path", "commit_message"]
+    }
+  },
+  {
+    "name": "overwrite_file",
+    "description": "Overwrite the contents of a file",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string",
+          "description": "Path to the file to overwrite"
+        },
+        "content": {
+          "type": "string",
+          "description": "New content to write to the file"
+        },
+        "commit_message": {
+          "type": "string",
+          "description": "Message describing the purpose of this file overwrite"
+        }
+      },
+      "required": ["path", "content", "commit_message"]
     }
   }
 ]

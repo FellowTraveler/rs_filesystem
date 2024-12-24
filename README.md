@@ -1,24 +1,8 @@
-MCP Rust CLI server template
+rs_filesystem:  MCP Rust Filesystem tools
 =============================
 
-Model Context Protocol (MCP) is an open protocol that enables seamless integration between LLM applications
-and external data sources and tools. Whether you’re building an AI-powered IDE, enhancing a chat interface,
-or creating custom AI workflows, MCP provides a standardized way to connect LLMs with the context they need.
+rs_filesystem is a simple set of filesystem tools that can be used in Claude desktop or any other MCP client.
 
-mcp-rs-template is a simple application template that demonstrates how to implement MCP CLI server in Rust.
-
-# How to use template?
-
-1. Clone the repository
-2. Modify project information in `Cargo.toml` and `src/mcp/mod.rs`
-3. Modify server handlers:
-    - `src/mcp/prompts.rs`: prompts handlers
-    - `src/mcp/resources.rs`: resources handlers
-    - `src/mcp/tools.rs`: tools handlers
-4. Modify `src/mcp/templates/*.json` if you prefer to use json files for prompts, resources, and tools
-
-mcp-rs-template is based on [rust-rpc-router](https://github.com/jeremychone/rust-rpc-router), a JSON-RPC routing
-library for Rust.
 
 # CLI options
 
@@ -35,20 +19,24 @@ library for Rust.
 ```json
 {
    "mcpServers": {
-      "current-time": {
-         "command": "rs_filesystem",
+      "rs_filesystem": {
+         "command": "/path/to/rs_filesystem",
          "args": [
             "--mcp"
          ],
          "env": {
-            "API_KEY": "xxxx"
+            "MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES": "/path/number/one:/path/number/two"
          }
       }
    }
 }
 ```
 
-If you want to check MCP log, please use `tail -n 20 -f ~/Library/Logs/Claude/mcp*.log`.
+Make sure you use the actual path to the rs_filesystem binary.
+Make sure the `MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES` env variable is set to a colon-separated list of allowed directories.
+The tools will only work inside those directories.
+
+If you want to check MCP log, please use `tail -n 20 -f ~/Library/Logs/Claude/rs_filesystem.logs.jsonl`.
 
 
 # References

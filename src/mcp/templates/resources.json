@@ -1,8 +1,8 @@
 [
   {
-    "uri": "file:///logs/app.log",
-    "name": "Application Logs",
-    "description": "application logs with timestamp, level, message",
-    "mimeType": "text/plain"
+    "uri": "file:///api/allowed_directories",
+    "name": "Allowed Directories",
+    "description": "List of directories that can be accessed",
+    "mimeType": "application/json"
   }
 ]
