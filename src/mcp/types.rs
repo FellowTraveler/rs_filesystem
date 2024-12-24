@@ -120,7 +120,15 @@ pub struct ReadResourceRequest {
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct ReadResourceResult {
-    pub content: ResourceContent,
+    pub contents: Vec<TextResourceContents>,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct TextResourceContents {
+    pub uri: Url,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mime_type: Option<String>,
+    pub text: String,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
