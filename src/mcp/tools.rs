@@ -135,9 +135,14 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                             type_name: Some("string".to_owned()),
                             description: Some("Target path to move/rename to".to_owned()),
                             enum_values: None,
+                        },
+                        "commit_message".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Message describing the purpose of this move/rename".to_owned()),
+                            enum_values: None,
                         }
                     },
-                    required: vec!["source_path".to_string(), "target_path".to_string()],
+                    required: vec!["source_path".to_string(), "target_path".to_string(), "commit_message".to_string()],
                 },
             },
             Tool {
@@ -165,9 +170,14 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                             type_name: Some("string".to_owned()),
                             description: Some("Path to the new directory".to_owned()),
                             enum_values: None,
+                        },
+                        "commit_message".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Message describing the purpose of this directory creation".to_owned()),
+                            enum_values: None,
                         }
                     },
-                    required: vec!["path".to_string()],
+                    required: vec!["path".to_string(), "commit_message".to_string()],
                 },
             },
             Tool {
@@ -291,6 +301,7 @@ pub async fn file_edit(request: FileEditRequest) -> HandlerResult<CallToolResult
 #[derive(Deserialize, Serialize, RpcParams)]
 pub struct CreateDirectoryRequest {
     pub path: String,
+    pub commit_message: String,
 }
 
 pub async fn create_directory(request: CreateDirectoryRequest) -> HandlerResult<CallToolResult> {
@@ -302,13 +313,23 @@ pub async fn create_directory(request: CreateDirectoryRequest) -> HandlerResult<
         });
     }
 
-    match std::fs::create_dir_all(&path) {
-        Ok(_) => Ok(CallToolResult {
-            content: vec![CallToolResultContent::Text { 
-                text: format!("Directory created successfully: {}", path.display()) 
-            }],
-            is_error: false,
-        }),
+    match fs::create_dir_all(path) {
+        Ok(_) => {
+            let mut message = format!("Created directory: {}", path.display());
+            
+            // Handle git commit if in a repo
+            if let Some(repo_path) = find_git_repo(path) {
+                match commit_to_git(&repo_path, path, &request.commit_message) {
+                    Ok(_) => message.push_str(". Changes committed to git"),
+                    Err(e) => message.push_str(&format!(". Git commit failed: {}", e)),
+                }
+            }
+            
+            Ok(CallToolResult {
+                content: vec![CallToolResultContent::Text { text: message }],
+                is_error: false,
+            })
+        },
         Err(e) => Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
                 text: format!("Failed to create directory: {}", e) 
@@ -420,6 +441,7 @@ pub async fn list_directory(request: ListDirectoryRequest) -> HandlerResult<Call
 pub struct MoveOrRenameRequest {
     pub source_path: String,
     pub target_path: String,
+    pub commit_message: String,
 }
 
 pub async fn move_or_rename(request: MoveOrRenameRequest) -> HandlerResult<CallToolResult> {
@@ -434,12 +456,22 @@ pub async fn move_or_rename(request: MoveOrRenameRequest) -> HandlerResult<CallT
     }
 
     match fs::rename(source_path, target_path) {
-        Ok(_) => Ok(CallToolResult {
-            content: vec![CallToolResultContent::Text { 
-                text: format!("Moved or renamed successfully: {} to {}", source_path.display(), target_path.display()) 
-            }],
-            is_error: false,
-        }),
+        Ok(_) => {
+            let mut message = format!("Moved or renamed successfully: {} to {}", source_path.display(), target_path.display());
+            
+            // Handle git commit if in a repo
+            if let Some(repo_path) = find_git_repo(target_path) {
+                match commit_to_git(&repo_path, target_path, &request.commit_message) {
+                    Ok(_) => message.push_str(". Changes committed to git"),
+                    Err(e) => message.push_str(&format!(". Git commit failed: {}", e)),
+                }
+            }
+            
+            Ok(CallToolResult {
+                content: vec![CallToolResultContent::Text { text: message }],
+                is_error: false,
+            })
+        },
         Err(e) => Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
                 text: format!("Failed to move or rename: {}", e) 
