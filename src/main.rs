@@ -4,7 +4,7 @@ use crate::mcp::prompts::prompts_get;
 use crate::mcp::prompts::prompts_list;
 use crate::mcp::resources::resource_read;
 use crate::mcp::resources::resources_list;
-use crate::mcp::resources::{list_directory, get_file_info};
+use crate::mcp::resources::{allowed_directories};
 use crate::mcp::tools::register_tools;
 use crate::mcp::types::CancelledNotification;
 use crate::mcp::types::JsonRpcError;
@@ -40,8 +40,7 @@ fn build_rpc_router() -> Router {
         .append_dyn("prompts/get", prompts_get.into_dyn())
         .append_dyn("resources/list", resources_list.into_dyn())
         .append_dyn("resources/read", resource_read.into_dyn())
-        .append_dyn("resources/list_directory", list_directory.into_dyn())
-        .append_dyn("resources/get_file_info", get_file_info.into_dyn());
+        .append_dyn("resources/allowed_directories", allowed_directories.into_dyn());
     let builder = register_tools(builder);
     builder.build()
 }
