@@ -9,6 +9,7 @@ use serde::Serialize;
 use std::fs;
 use std::path::Path;
 use git2::{Repository, Signature};
+use crate::mcp::utilities::{validate_path_or_error, validate_paths_or_error, is_path_allowed};
 
 /// register all tools to the router
 pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
@@ -233,9 +234,18 @@ pub struct FileEditRequest {
     pub commit_message: String,
 }
 
+
 pub async fn file_edit(request: FileEditRequest) -> HandlerResult<CallToolResult> {
-    // Read the file
+    // Validate path is within allowed directories
     let path = Path::new(&request.file_path);
+    if let Err(msg) = validate_path_or_error(path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { text: msg }],
+            is_error: true,
+        });
+    }
+
+    // Read the file
     let content = match fs::read_to_string(path) {
         Ok(content) => content,
         Err(e) => return Ok(CallToolResult {
@@ -295,6 +305,13 @@ pub struct CreateDirectoryRequest {
 
 pub async fn create_directory(request: CreateDirectoryRequest) -> HandlerResult<CallToolResult> {
     let path = Path::new(&request.path);
+    if let Err(msg) = validate_path_or_error(path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { text: msg }],
+            is_error: true,
+        });
+    }
+
     match std::fs::create_dir_all(&path) {
         Ok(_) => Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
@@ -319,6 +336,13 @@ pub struct OverwriteFileRequest {
 
 pub async fn overwrite_file(request: OverwriteFileRequest) -> HandlerResult<CallToolResult> {
     let path = Path::new(&request.path);
+    if let Err(msg) = validate_path_or_error(path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { text: msg }],
+            is_error: true,
+        });
+    }
+
     match std::fs::write(path, &request.content) {
         Ok(_) => Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
@@ -342,6 +366,13 @@ pub struct ReadFileRequest {
 
 pub async fn read_file(request: ReadFileRequest) -> HandlerResult<CallToolResult> {
     let path = Path::new(&request.file_path);
+    if let Err(msg) = validate_path_or_error(path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { text: msg }],
+            is_error: true,
+        });
+    }
+
     match fs::read_to_string(path) {
         Ok(content) => Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { text: content }],
@@ -363,12 +394,22 @@ pub struct ListDirectoryRequest {
 
 pub async fn list_directory(request: ListDirectoryRequest) -> HandlerResult<CallToolResult> {
     let path = Path::new(&request.path);
+    if let Err(msg) = validate_path_or_error(path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { text: msg }],
+            is_error: true,
+        });
+    }
+
     match fs::read_dir(path) {
         Ok(dir) => {
             let mut content = String::new();
             for entry in dir {
                 if let Ok(entry) = entry {
-                    content.push_str(&format!("{}\n", entry.file_name().to_string_lossy()));
+                    // Also validate each entry is within allowed directories
+                    if is_path_allowed(&entry.path()) {
+                        content.push_str(&format!("{}\n", entry.file_name().to_string_lossy()));
+                    }
                 }
             }
             Ok(CallToolResult {
@@ -394,6 +435,14 @@ pub struct MoveOrRenameRequest {
 pub async fn move_or_rename(request: MoveOrRenameRequest) -> HandlerResult<CallToolResult> {
     let source_path = Path::new(&request.source_path);
     let target_path = Path::new(&request.target_path);
+    
+    if let Err(msg) = validate_paths_or_error(source_path, target_path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { text: msg }],
+            is_error: true,
+        });
+    }
+
     match fs::rename(source_path, target_path) {
         Ok(_) => Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
@@ -417,6 +466,13 @@ pub struct GetFileInfoRequest {
 
 pub async fn get_file_info(request: GetFileInfoRequest) -> HandlerResult<CallToolResult> {
     let path = Path::new(&request.path);
+    if let Err(msg) = validate_path_or_error(path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text { text: msg }],
+            is_error: true,
+        });
+    }
+
     match fs::metadata(path) {
         Ok(metadata) => {
             let mut content = String::new();
@@ -486,17 +542,56 @@ mod tests {
     use std::fs;
     use std::path::Path;
     use tempfile::TempDir;
+    use std::env;
 
+    fn setup_test_env() -> (TempDir, String) {
+        let _temp_dir = TempDir::new().unwrap();
+        let canonical_path = _temp_dir.path().canonicalize().unwrap();
+        let _temp_path = canonical_path.to_str().unwrap().to_string();
+        
+        // On macOS, we need to allow both the /var and /private/var paths
+        #[cfg(target_os = "macos")]
+        {
+            // Always allow both /var and /private/var paths if applicable
+            let (var_path, private_var_path) = if _temp_path.starts_with("/private/var") {
+                (_temp_path.strip_prefix("/private").unwrap().to_string(), _temp_path.clone())
+            } else if _temp_path.starts_with("/var") {
+                (_temp_path.clone(), format!("/private{}", _temp_path))
+            } else {
+                (_temp_path.clone(), _temp_path.clone())
+            };
+            
+            // Set both paths in the environment variable
+            env::set_var(
+                "MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES",
+                if var_path != private_var_path {
+                    format!("{}:{}", var_path, private_var_path)
+                } else {
+                    var_path
+                }
+            );
+        }
+    
+        #[cfg(not(target_os = "macos"))]
+        {
+            env::set_var(
+                "MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES",
+                &_temp_path
+            );
+        }
+        
+        (_temp_dir, _temp_path)
+    }
+    
     fn setup_git_repo() -> (TempDir, String) {
-        let temp_dir = TempDir::new().unwrap();
-        let repo_path = temp_dir.path().to_str().unwrap().to_string();
+        let (_temp_dir, _temp_path) = setup_test_env();
         
-        // Initialize git repo
-        let repo = git2::Repository::init(&repo_path).unwrap();
+        // Initialize git repo using the temp directory path
+        let repo = git2::Repository::init(_temp_dir.path()).unwrap();
         
-        // Create a test file
-        let file_path = Path::new(&repo_path).join("test.txt");
-        fs::write(&file_path, "initial content\n").unwrap();
+        // Create test file in the temp directory
+        let test_file_path = _temp_dir.path().join("test.txt");
+        fs::write(&test_file_path, "initial content\n").unwrap();
         
         // Make initial commit
         let mut index = repo.index().unwrap();
@@ -507,12 +602,14 @@ mod tests {
         let signature = git2::Signature::now("Test User", "test@example.com").unwrap();
         repo.commit(Some("HEAD"), &signature, &signature, "Initial commit", &tree, &[]).unwrap();
         
-        (temp_dir, file_path.to_str().unwrap().to_string())
+        // Canonicalize the file path after creating it
+        let canonical_file_path = test_file_path.canonicalize().unwrap();
+        (_temp_dir, canonical_file_path.to_str().unwrap().to_string())
     }
 
     #[tokio::test]
     async fn test_file_edit_with_git() {
-        let (temp_dir, file_path) = setup_git_repo();
+        let (_temp_dir, file_path) = setup_git_repo();
         
         let request = FileEditRequest {
             file_path: file_path.clone(),
@@ -522,42 +619,44 @@ mod tests {
             commit_message: "test commit".to_string(),
         };
 
-        let _result = file_edit(request).await.unwrap();
+        let result = file_edit(request).await.unwrap();
+        assert!(!result.is_error, "file_edit failed: {:?}", result.content);
         
         // Verify file was modified
         let content = fs::read_to_string(&file_path).unwrap();
         assert_eq!(content, "modified content");
         
         // Verify git commit happened
-        let repo = git2::Repository::open(temp_dir.path()).unwrap();
+        let repo = git2::Repository::open(_temp_dir.path()).unwrap();
         let head_commit = repo.head().unwrap().peel_to_commit().unwrap();
         assert_eq!(head_commit.message().unwrap(), "test commit");
-        
-        // Clean up
-        drop(temp_dir);
     }
 
     #[tokio::test]
     async fn test_file_edit_without_git() {
-        let temp_dir = TempDir::new().unwrap();
-        let file_path = temp_dir.path().join("test.txt");
-        fs::write(&file_path, "initial content\n").unwrap();
+        let (_temp_dir, _temp_path) = setup_test_env();
         
+        // Create test file in the temp directory
+        let test_file_path = Path::new(&_temp_path).join("test.txt");
+        fs::write(&test_file_path, "initial content\n").unwrap();
+        
+        // Canonicalize the file path after creating it
+        let canonical_file_path = test_file_path.canonicalize().unwrap();
+        
+        // Edit the file
         let request = FileEditRequest {
-            file_path: file_path.to_str().unwrap().to_string(),
+            file_path: canonical_file_path.to_str().unwrap().to_string(),
             start_line: 0,
             end_line: 0,
             new_content: "modified content".to_string(),
-            commit_message: "test commit".to_string(),
+            commit_message: "".to_string(),
         };
-
-        let _result = file_edit(request).await.unwrap();
         
-        // Verify file was modified
-        let content = fs::read_to_string(&file_path).unwrap();
+        let result = file_edit(request).await.unwrap();
+        assert!(!result.is_error);
+        
+        // Verify file content
+        let content = fs::read_to_string(&canonical_file_path).unwrap();
         assert_eq!(content, "modified content");
-        
-        // Clean up
-        drop(temp_dir);
     }
 }

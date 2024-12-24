@@ -5,15 +5,8 @@ use rpc_router::IntoHandlerError;
 use url::Url;
 use serde_json::json;
 use serde::{Deserialize, Serialize};
+use crate::mcp::utilities::get_allowed_directories;
 
-fn get_allowed_directories() -> Vec<String> {
-    std::env::var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES")
-        .unwrap_or_default()
-        .split(':')
-        .filter(|s| !s.is_empty())  // Filter out empty strings from potential double colons
-        .map(String::from)
-        .collect()
-}
 
 pub async fn resources_list(
     _request: Option<ListResourcesRequest>,
@@ -26,7 +19,7 @@ pub async fn resources_list(
         name: "Allowed Directories".to_string(),
         description: Some("List of directories that can be accessed".to_string()),
         mime_type: Some("application/json".to_string()),
-    });
+    }); 
     
     let response = ListResourcesResult {
         resources,

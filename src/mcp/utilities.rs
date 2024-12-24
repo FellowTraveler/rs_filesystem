@@ -5,7 +5,16 @@ use crate::mcp::SERVER_VERSION;
 use rpc_router::HandlerResult;
 use serde_json::json;
 use serde_json::Value;
+use std::path::Path;
 
+pub fn get_allowed_directories() -> Vec<String> {
+    std::env::var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES")
+        .unwrap_or_default()
+        .split(':')
+        .filter(|s| !s.is_empty())
+        .map(String::from)
+        .collect()
+}
 /// handler for `initialize` request from client
 pub async fn initialize(_request: InitializeRequest) -> HandlerResult<InitializeResult> {
     let result = InitializeResult {
@@ -68,4 +77,63 @@ pub fn notify(method: &str, params: Option<Value>) {
         "params": params,
     });
     println!("{}", serde_json::to_string(&notification).unwrap());
+}
+
+
+pub fn is_path_allowed(path: &Path) -> bool {
+    let allowed_dirs = get_allowed_directories();
+    if allowed_dirs.is_empty() {
+        return false; // If no directories are explicitly allowed, deny all access
+    }
+
+    // Canonicalize the input path to resolve any .. or symlinks
+    let canonical_path = match path.canonicalize() {
+        Ok(p) => p,
+        Err(_) => return false, // If we can't canonicalize, assume it's not allowed
+    };
+
+    // Check if the canonical path starts with any of the allowed directories
+    for allowed_dir in allowed_dirs {
+        let allowed_path = Path::new(&allowed_dir);
+        let canonical_allowed = match allowed_path.canonicalize() {
+            Ok(p) => p,
+            Err(_) => continue, // Skip invalid allowed directories
+        };
+
+        // Try both the canonical path and the original path
+        if canonical_path.starts_with(&canonical_allowed) || 
+           canonical_path.starts_with(allowed_path) {
+            return true;
+        }
+    }
+
+    false
+}
+
+pub fn validate_path_or_error(path: &Path) -> Result<(), String> {
+    if !is_path_allowed(path) {
+        Err(format!(
+            "Access denied: {} is not within allowed directories. Use the allowed_directories resource to view permitted locations.",
+            path.display()
+        ))
+    } else {
+        Ok(())
+    }
+}
+
+// For operations that involve two paths (like move/rename)
+pub fn validate_paths_or_error(source: &Path, target: &Path) -> Result<(), String> {
+    if !is_path_allowed(source) {
+        Err(format!(
+            "Access denied: source path {} is not within allowed directories",
+            source.display()
+        ))
+    } else if !is_path_allowed(target) {
+        Err(format!(
+            "Access denied: target path {} is not within allowed directories",
+            target.display()
+        ))
+    } else {
+        Ok(())
+    }
 }
