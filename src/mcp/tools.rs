@@ -78,7 +78,7 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                         },
                         "commit_message".to_string() => ToolInputSchemaProperty {
                             type_name: Some("string".to_owned()),
-                            description: Some("Optional git commit message".to_owned()),
+                            description: Some("Message describing the purpose of this edit".to_owned()),
                             enum_values: None,
                         }
                     },
@@ -86,7 +86,8 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                         "file_path".to_string(),
                         "start_line".to_string(),
                         "end_line".to_string(),
-                        "new_content".to_string()
+                        "new_content".to_string(),
+                        "commit_message".to_string()
                     ],
                 },
             },
