@@ -555,16 +555,70 @@ pub async fn get_file_info(request: GetFileInfoRequest) -> HandlerResult<CallToo
 pub struct GrepSearchRequest {
     pub pattern: String,
     pub path: String,
+    #[serde(default = "default_recursive", deserialize_with = "deserialize_bool_from_string_or_bool")]
     pub recursive: Option<bool>,
+    #[serde(default = "default_case_sensitive", deserialize_with = "deserialize_bool_from_string_or_bool")]
     pub case_sensitive: Option<bool>,
+}
+
+fn default_recursive() -> Option<bool> {
+    Some(true)
+}
+
+fn default_case_sensitive() -> Option<bool> {
+    Some(true)
+}
+
+struct BoolOrStringVisitor;
+
+impl<'de> serde::de::Visitor<'de> for BoolOrStringVisitor {
+    type Value = Option<bool>;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+        formatter.write_str("a boolean or string representing a boolean")
+    }
+
+    fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(Some(value))
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        match value.to_lowercase().as_str() {
+            "true" | "1" | "yes" | "on" => Ok(Some(true)),
+            "false" | "0" | "no" | "off" => Ok(Some(false)),
+            other => Err(E::custom(format!(
+                "Invalid boolean string value: {}", other
+            ))),
+        }
+    }
+
+    fn visit_string<E>(self, value: String) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        self.visit_str(&value)
+    }
+}
+
+fn deserialize_bool_from_string_or_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserializer.deserialize_any(BoolOrStringVisitor)
 }
 
 pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolResult> {
     // First check if grep is available
     if let Err(_) = std::process::Command::new("grep").arg("--version").output() {
         notify("logging/message", Some(json!({
-            "message": "Skipping grep_search test: grep command not available",
-            "level": "info"
+            "message": "grep command not found on system",
+            "level": "error"
         })));
         return Ok(CallToolResult {
             content: vec![CallToolResultContent::Text {
@@ -578,6 +632,10 @@ pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolRe
     
     // Validate the search path is allowed
     if let Err(e) = validate_path_or_error(path) {
+        notify("logging/message", Some(json!({
+            "message": format!("Path validation error: {}", e),
+            "level": "error"
+        })));
         return Ok(CallToolResult {
             content: vec![CallToolResultContent::Text {
                 text: e.to_string(),
@@ -590,6 +648,10 @@ pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolRe
     let recursive = request.recursive.unwrap_or(true);
     if recursive {
         if !path.is_dir() {
+            notify("logging/message", Some(json!({
+                "message": "Path must be a directory for recursive search",
+                "level": "error"
+            })));
             return Ok(CallToolResult {
                 content: vec![CallToolResultContent::Text {
                     text: "Path must be a directory for recursive search".to_string(),
@@ -598,6 +660,10 @@ pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolRe
             });
         }
     } else if !path.exists() {
+        notify("logging/message", Some(json!({
+            "message": "Path does not exist",
+            "level": "error"
+        })));
         return Ok(CallToolResult {
             content: vec![CallToolResultContent::Text {
                 text: "Path does not exist".to_string(),
@@ -622,10 +688,27 @@ pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolRe
     cmd.arg(&request.pattern)
         .arg(path);
 
+    notify("logging/message", Some(json!({
+        "message": format!("Running grep command: {:?}", cmd),
+        "level": "debug"
+    })));
+
     match cmd.output() {
         Ok(output) => {
             let stdout = String::from_utf8_lossy(&output.stdout);
             let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            notify("logging/message", Some(json!({
+                "message": format!("grep stdout: {}", stdout),
+                "level": "debug"
+            })));
+            
+            if !stderr.is_empty() {
+                notify("logging/message", Some(json!({
+                    "message": format!("grep stderr: {}", stderr),
+                    "level": "debug"
+                })));
+            }
             
             if output.status.success() {
                 Ok(CallToolResult {
@@ -635,6 +718,10 @@ pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolRe
                     is_error: false,
                 })
             } else {
+                notify("logging/message", Some(json!({
+                    "message": format!("grep error: {}", stderr),
+                    "level": "error"
+                })));
                 Ok(CallToolResult {
                     content: vec![CallToolResultContent::Text {
                         text: format!("Grep error: {}", stderr),
@@ -643,12 +730,18 @@ pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolRe
                 })
             }
         }
-        Err(e) => Ok(CallToolResult {
-            content: vec![CallToolResultContent::Text {
-                text: format!("Failed to execute grep: {}", e),
-            }],
-            is_error: true,
-        }),
+        Err(e) => {
+            notify("logging/message", Some(json!({
+                "message": format!("Failed to execute grep: {}", e),
+                "level": "error"
+            })));
+            Ok(CallToolResult {
+                content: vec![CallToolResultContent::Text {
+                    text: format!("Failed to execute grep: {}", e),
+                }],
+                is_error: true,
+            })
+        },
     }
 }
 
