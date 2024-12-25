@@ -675,7 +675,8 @@ pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolRe
     let case_sensitive = request.case_sensitive.unwrap_or(true);
 
     let mut cmd = std::process::Command::new("grep");
-    cmd.arg("-n"); // Show line numbers
+    cmd.arg("-n") // Show line numbers
+       .arg("-H"); // Always show filename
     
     if !case_sensitive {
         cmd.arg("-i");
