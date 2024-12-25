@@ -10,6 +10,9 @@ use std::fs;
 use std::path::Path;
 use git2::{Repository, Signature};
 use crate::mcp::utilities::{validate_path_or_error, validate_paths_or_error, is_path_allowed};
+use chrono::Local;
+use serde_json::json;
+use crate::notify;
 
 /// register all tools to the router
 pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
@@ -24,6 +27,7 @@ pub fn register_tools(router_builder: RouterBuilder) -> RouterBuilder {
         .append_dyn("get_file_info", get_file_info.into_dyn())
         .append_dyn("create_directory", create_directory.into_dyn())
         .append_dyn("overwrite_file", overwrite_file.into_dyn())
+        .append_dyn("grep_search", grep_search.into_dyn())
 }
 
 pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<ListToolsResult> {
@@ -199,6 +203,36 @@ pub async fn tools_list(_request: Option<ListToolsRequest>) -> HandlerResult<Lis
                     },
                     required: vec!["path".to_string(), "content".to_string()],
                 },
+            },
+            Tool {
+                name: "grep_search".to_string(),
+                description: Some("Search for a pattern in files or directories. For recursive searches, the path must be a directory. For non-recursive searches, the path must exist.".to_string()),
+                input_schema: ToolInputSchema {
+                    type_name: "object".to_string(),
+                    properties: hashmap! {
+                        "pattern".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Pattern to search for".to_owned()),
+                            enum_values: None,
+                        },
+                        "path".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("string".to_owned()),
+                            description: Some("Path to search in. For recursive searches this must be a directory.".to_owned()),
+                            enum_values: None,
+                        },
+                        "recursive".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("boolean".to_owned()),
+                            description: Some("Whether to search recursively in subdirectories. Defaults to true.".to_owned()),
+                            enum_values: None,
+                        },
+                        "case_sensitive".to_string() => ToolInputSchemaProperty {
+                            type_name: Some("boolean".to_owned()),
+                            description: Some("Whether the search should be case sensitive. Defaults to true.".to_owned()),
+                            enum_values: None,
+                        },
+                    },
+                    required: vec!["pattern".to_string(), "path".to_string()],
+                },
             }
         ],
         next_cursor: None,
@@ -212,7 +246,7 @@ pub struct CurrentTimeRequest {
 }
 
 pub async fn current_time(_request: CurrentTimeRequest) -> HandlerResult<CallToolResult> {
-    let result = format!("Now: {}!", chrono::Local::now().to_rfc2822());
+    let result = format!("Now: {}!", Local::now().to_rfc2822());
     Ok(CallToolResult {
         content: vec![CallToolResultContent::Text { text: result }],
         is_error: false,
@@ -223,7 +257,7 @@ pub async fn current_time(_request: CurrentTimeRequest) -> HandlerResult<CallToo
 pub struct GetLocalTimeRequest {}
 
 pub async fn get_local_time(_request: GetLocalTimeRequest) -> HandlerResult<CallToolResult> {
-    let result = format!("Local time: {}", chrono::Local::now().to_rfc2822());
+    let result = format!("Local time: {}", Local::now().to_rfc2822());
     Ok(CallToolResult {
         content: vec![CallToolResultContent::Text { text: result }],
         is_error: false,
@@ -517,6 +551,107 @@ pub async fn get_file_info(request: GetFileInfoRequest) -> HandlerResult<CallToo
     }
 }
 
+#[derive(Deserialize, Serialize, RpcParams)]
+pub struct GrepSearchRequest {
+    pub pattern: String,
+    pub path: String,
+    pub recursive: Option<bool>,
+    pub case_sensitive: Option<bool>,
+}
+
+pub async fn grep_search(request: GrepSearchRequest) -> HandlerResult<CallToolResult> {
+    // First check if grep is available
+    if let Err(_) = std::process::Command::new("grep").arg("--version").output() {
+        notify("logging/message", Some(json!({
+            "message": "Skipping grep_search test: grep command not available",
+            "level": "info"
+        })));
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text {
+                text: "grep command not found on system".to_string(),
+            }],
+            is_error: true,
+        });
+    }
+
+    let path = Path::new(&request.path);
+    
+    // Validate the search path is allowed
+    if let Err(e) = validate_path_or_error(path) {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text {
+                text: e.to_string(),
+            }],
+            is_error: true,
+        });
+    }
+
+    // For recursive searches, the path must be a directory and must exist
+    let recursive = request.recursive.unwrap_or(true);
+    if recursive {
+        if !path.is_dir() {
+            return Ok(CallToolResult {
+                content: vec![CallToolResultContent::Text {
+                    text: "Path must be a directory for recursive search".to_string(),
+                }],
+                is_error: true,
+            });
+        }
+    } else if !path.exists() {
+        return Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text {
+                text: "Path does not exist".to_string(),
+            }],
+            is_error: true,
+        });
+    }
+
+    let case_sensitive = request.case_sensitive.unwrap_or(true);
+
+    let mut cmd = std::process::Command::new("grep");
+    cmd.arg("-n"); // Show line numbers
+    
+    if !case_sensitive {
+        cmd.arg("-i");
+    }
+    
+    if recursive {
+        cmd.arg("-r");
+    }
+    
+    cmd.arg(&request.pattern)
+        .arg(path);
+
+    match cmd.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            
+            if output.status.success() {
+                Ok(CallToolResult {
+                    content: vec![CallToolResultContent::Text {
+                        text: stdout.into_owned(),
+                    }],
+                    is_error: false,
+                })
+            } else {
+                Ok(CallToolResult {
+                    content: vec![CallToolResultContent::Text {
+                        text: format!("Grep error: {}", stderr),
+                    }],
+                    is_error: true,
+                })
+            }
+        }
+        Err(e) => Ok(CallToolResult {
+            content: vec![CallToolResultContent::Text {
+                text: format!("Failed to execute grep: {}", e),
+            }],
+            is_error: true,
+        }),
+    }
+}
+
 fn find_git_repo(path: &Path) -> Option<String> {
     let mut current = path.to_path_buf();
     while let Some(parent) = current.parent() {
@@ -563,7 +698,6 @@ mod tests {
     use super::*;
     use std::env;
     use std::fs;
-    use std::path::Path;
     use tempfile::TempDir;
     use serde_json::json;
     use crate::mcp::utilities::notify;
@@ -667,20 +801,17 @@ mod tests {
     #[tokio::test]
     async fn test_file_edit_without_git() {
         let (_temp_dir, _temp_path) = setup_test_env();
-        notify("logging/message", Some(json!({
-            "message": format!("Test env temp path: {}", _temp_path),
-            "level": "debug"
-        })));
         
         // Set up allowed directories
         #[cfg(target_os = "macos")]
         {
-            let (var_path, private_var_path) = if _temp_path.starts_with("/private/var") {
-                (_temp_path.strip_prefix("/private").unwrap().to_string(), _temp_path.clone())
-            } else if _temp_path.starts_with("/var") {
-                (_temp_path.clone(), format!("/private{}", _temp_path))
+            let temp_path = _temp_dir.path().canonicalize().unwrap().to_str().unwrap().to_string();
+            let (var_path, private_var_path) = if temp_path.starts_with("/private/var") {
+                (temp_path.strip_prefix("/private").unwrap().to_string(), temp_path.clone())
+            } else if temp_path.starts_with("/var") {
+                (temp_path.clone(), format!("/private{}", temp_path))
             } else {
-                (_temp_path.clone(), _temp_path.clone())
+                (temp_path.clone(), temp_path.clone())
             };
             
             notify("logging/message", Some(json!({
@@ -688,52 +819,51 @@ mod tests {
                 "level": "debug"
             })));
             
-            let allowed_dirs = if var_path != private_var_path {
+            env::set_var(
+                "MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES",
                 format!("{}:{}", var_path, private_var_path)
-            } else {
-                var_path
-            };
+            );
+            
             notify("logging/message", Some(json!({
-                "message": format!("Setting allowed directories: {}", allowed_dirs),
+                "message": format!("Setting allowed directories: {}", format!("{}:{}", var_path, private_var_path)),
                 "level": "debug"
             })));
-            env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", allowed_dirs);
         }
         
         #[cfg(not(target_os = "macos"))]
         {
-            env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", &_temp_path);
+            let temp_path = _temp_dir.path().canonicalize().unwrap().to_str().unwrap().to_string();
+            env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", &temp_path);
         }
         
         // Create test file in the temp directory
-        let test_file_path = Path::new(&_temp_path).join("test.txt");
-        fs::write(&test_file_path, "initial content\n").unwrap();
+        let test_file = _temp_dir.path().join("test.txt");
+        fs::write(&test_file, "initial content").unwrap();
+        
         notify("logging/message", Some(json!({
-            "message": format!("Test file path: {}", test_file_path.display()),
+            "message": format!("Test file path: {}", test_file.to_str().unwrap()),
             "level": "debug"
         })));
         
-        // Canonicalize the file path after creating it
-        let canonical_file_path = test_file_path.canonicalize().unwrap();
+        let canonical_file_path = test_file.canonicalize().unwrap();
+        
         notify("logging/message", Some(json!({
-            "message": format!("Canonical file path: {}", canonical_file_path.display()),
+            "message": format!("Canonical file path: {}", canonical_file_path.to_str().unwrap()),
             "level": "debug"
         })));
         
-        // Print allowed directories
         notify("logging/message", Some(json!({
-            "message": format!("Allowed directories: {}", std::env::var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES").unwrap_or_default()),
+            "message": format!("Allowed directories: {}", env::var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES").unwrap_or_default()),
             "level": "debug"
         })));
         
-        // Edit the file
         let request = FileEditRequest {
             file_path: canonical_file_path.to_str().unwrap().to_string(),
-            old_content: "initial content\n".to_string(),
+            old_content: "initial content".to_string(),
             new_content: "modified content".to_string(),
             commit_message: "".to_string(),
         };
-        
+
         let result = file_edit(request).await.unwrap();
         if result.is_error {
             notify("logging/message", Some(json!({
@@ -741,10 +871,87 @@ mod tests {
                 "level": "error"
             })));
         }
-        assert!(!result.is_error);
+        assert!(!result.is_error, "file_edit failed: {:?}", result.content);
         
         // Verify file content
         let content = fs::read_to_string(&canonical_file_path).unwrap();
         assert_eq!(content, "modified content");
+        
+        // Clean up
+        env::remove_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES");
+    }
+
+    #[tokio::test]
+    async fn test_grep_search() {
+        // First check if grep is available
+        if let Err(_) = std::process::Command::new("grep").arg("--version").output() {
+            notify("logging/message", Some(json!({
+                "message": "Skipping grep_search test: grep command not available",
+                "level": "info"
+            })));
+            return;
+        }
+
+        let (temp_dir, temp_path) = setup_test_env();
+        
+        notify("logging/message", Some(json!({
+            "message": format!("Test directory: {}", temp_path),
+            "level": "debug"
+        })));
+        
+        // Set up allowed directories
+        #[cfg(target_os = "macos")]
+        env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", &temp_path);
+        #[cfg(target_os = "linux")]
+        env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", &temp_path);
+        #[cfg(target_os = "windows")]
+        env::set_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES", &temp_path);
+        
+        notify("logging/message", Some(json!({
+            "message": format!("Allowed directories: {}", env::var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES").unwrap_or_default()),
+            "level": "debug"
+        })));
+        
+        // Create test files with specific content we can verify
+        let test1_content = "Hello World\nTEST_MARKER line\nAnother test";
+        let test2_content = "Different content\nTEST_MARKER pattern here";
+        let test3_content = "More test content\nTEST_MARKER final";
+
+        fs::write(temp_dir.path().join("test1.txt"), test1_content).unwrap();
+        fs::write(temp_dir.path().join("test2.txt"), test2_content).unwrap();
+        fs::create_dir(temp_dir.path().join("subdir")).unwrap();
+        fs::write(temp_dir.path().join("subdir/test3.txt"), test3_content).unwrap();
+
+        // Test recursive search
+        let request = GrepSearchRequest {
+            pattern: "TEST_MARKER".to_string(),
+            path: temp_path.clone(),
+            recursive: Some(true),
+            case_sensitive: Some(true),
+        };
+        
+        let result = grep_search(request).await.unwrap();
+        if result.is_error {
+            if let CallToolResultContent::Text { text } = &result.content[0] {
+                notify("logging/message", Some(json!({
+                    "message": format!("Error content: {}", text),
+                    "level": "error"
+                })));
+            }
+        }
+        assert!(!result.is_error, "Grep search failed");
+        assert_eq!(result.content.len(), 1);
+        if let CallToolResultContent::Text { text } = &result.content[0] {
+            notify("logging/message", Some(json!({
+                "message": format!("Grep output: {}", text),
+                "level": "debug"
+            })));
+            assert!(text.contains("test1.txt"), "Output should contain test1.txt");
+            assert!(text.contains("test2.txt"), "Output should contain test2.txt");
+            assert!(text.contains("test3.txt"), "Output should contain test3.txt");
+        }
+
+        // Clean up
+        env::remove_var("MCP_RS_FILESYSTEM_ALLOWED_DIRECTORIES");
     }
 }

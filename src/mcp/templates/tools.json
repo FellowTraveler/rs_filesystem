@@ -151,5 +151,33 @@
       },
       "required": ["path", "content", "commit_message"]
     }
+  },
+  {
+    "name": "grep_search",
+    "description": "Search for a pattern in files or directories. For recursive searches, the path must be a directory. For non-recursive searches, the path must exist.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "pattern": {
+          "type": "string",
+          "description": "Pattern to search for"
+        },
+        "path": {
+          "type": "string",
+          "description": "Path to search in. For recursive searches this must be a directory."
+        },
+        "recursive": {
+          "type": "boolean",
+          "description": "Whether to search recursively in subdirectories. Defaults to true.",
+          "default": true
+        },
+        "case_sensitive": {
+          "type": "boolean",
+          "description": "Whether the search should be case sensitive. Defaults to true.",
+          "default": true
+        }
+      },
+      "required": ["pattern", "path"]
+    }
   }
 ]
