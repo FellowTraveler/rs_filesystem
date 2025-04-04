@@ -293,15 +293,52 @@ pub async fn file_edit(request: FileEditRequest) -> HandlerResult<CallToolResult
         }),
     };
 
-    // Count matches of old_content
-    let matches = content.matches(&request.old_content).count();
-    if matches == 0 || matches > 1 {
+    // Before attempting to edit, use grep to check for uniqueness of the pattern
+    // This will give better context in case of ambiguity and ensure the pattern is truly unique
+    let pattern = &request.old_content;
+    let file_path_str = path.to_str().unwrap_or_default();
+
+    // First check the number of matches using simple string matching
+    let matches = content.matches(pattern).count();
+    if matches == 0 {
         return Ok(CallToolResult {
             content: vec![CallToolResultContent::Text { 
-                text: format!("Found {} matches of content - must match exactly once", matches) 
+                text: format!("Pattern not found in file: No matches for the specified content") 
             }],
             is_error: true,
         });
+    } else if matches > 1 {
+        // If there are multiple matches, use grep to show them with context
+        let mut grep_cmd = std::process::Command::new("grep");
+        grep_cmd
+            .arg("-n")           // Show line numbers
+            .arg("--color=never") // No color codes in output
+            .arg("-F")           // Fixed strings (literal match, not regex)
+            .arg("-e")           // Pattern follows
+            .arg(pattern)
+            .arg(file_path_str);
+        
+        match grep_cmd.output() {
+            Ok(output) => {
+                let grep_result = String::from_utf8_lossy(&output.stdout).to_string();
+                return Ok(CallToolResult {
+                    content: vec![CallToolResultContent::Text { 
+                        text: format!("Found {} matches of content - must match exactly once. Here are the matches:\n{}", 
+                                     matches, grep_result) 
+                    }],
+                    is_error: true,
+                });
+            },
+            Err(_) => {
+                // Fallback if grep fails
+                return Ok(CallToolResult {
+                    content: vec![CallToolResultContent::Text { 
+                        text: format!("Found {} matches of content - must match exactly once.", matches) 
+                    }],
+                    is_error: true,
+                });
+            }
+        }
     }
 
     // Replace content
